@@ -2,11 +2,22 @@ import { z } from "zod";
 import { INVOICE_STATUSES } from "@/lib/invoice-status";
 import { paginationSchema } from "../validation";
 
-/** "YYYY-MM-DD" that is also a real calendar date (rejects 2026-02-30). */
+/**
+ * True for a real calendar date. "2026-02-30" parses but rolls over to March, so the
+ * round trip fails. "2026-13-01" parses to an Invalid Date, whose toISOString() would
+ * throw (a 500), so that is checked first.
+ */
+function isCalendarDate(s: string): boolean {
+  const date = new Date(`${s}T00:00:00Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().startsWith(s);
+}
+
+/** "YYYY-MM-DD" that is also a real calendar date. */
 const dateOnly = z
   .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/, "Use the format YYYY-MM-DD")
-  .refine((s) => new Date(`${s}T00:00:00Z`).toISOString().startsWith(s), "Not a valid date");
+  // abort: a string in the wrong format gets one message and never reaches the date check.
+  .regex(/^\d{4}-\d{2}-\d{2}$/, { error: "Use the format YYYY-MM-DD", abort: true })
+  .refine(isCalendarDate, "Not a valid date");
 
 const lineSchema = z.object({
   productId: z.string().regex(/^[a-f\d]{24}$/i, "Choose a product"),

@@ -100,6 +100,15 @@ describe("invoices", () => {
     expect((await dup.json()).error.fields).toHaveProperty("items.1.productId");
   });
 
+  it("rejects impossible or malformed dates with 422, not a server error", async () => {
+    const a = await product("A", 100, 3);
+    for (const date of ["2026-02-30", "2026-13-01", "2026-01-32", "tomorrow"]) {
+      const res = await create({ customerName: "Acme Ltd", issueDate: date, items: [{ productId: a, quantity: 1 }] });
+      expect(res.status, date).toBe(422);
+      expect((await res.json()).error.fields, date).toHaveProperty("issueDate");
+    }
+  });
+
   it("(d) issuing decrements stock for every line", async () => {
     const a = await product("A", 100, 10);
     const b = await product("B", 200, 5);
