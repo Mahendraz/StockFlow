@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { ZodError, type z } from "zod";
 import { MoneyError } from "@/lib/money";
 import { clearSessionCookie, SESSION_COOKIE } from "./auth/cookie";
+import { RateLimitError } from "./auth/rate-limit";
 import { requireUser, type AuthUser } from "./auth/auth.service";
 import { connectDb } from "./db";
 import { AppError, badRequest, type FieldErrors } from "./errors";
@@ -26,6 +27,12 @@ function isDuplicateKeyError(err: unknown): err is { code: 11000; keyPattern?: R
 }
 
 export function toErrorResponse(err: unknown): NextResponse {
+  if (err instanceof RateLimitError) {
+    const res = errorResponse(err.status, err.code, err.message);
+    res.headers.set("Retry-After", String(err.retryAfterSeconds));
+    return res;
+  }
+
   if (err instanceof AppError) return errorResponse(err.status, err.code, err.message, err.fields);
 
   if (err instanceof ZodError) return errorResponse(422, "VALIDATION_ERROR", "Validation failed", zodFieldErrors(err));

@@ -3,6 +3,7 @@ import { POST as login } from "@/app/api/auth/login/route";
 import { POST as logout } from "@/app/api/auth/logout/route";
 import { GET as me } from "@/app/api/auth/me/route";
 import { POST as register } from "@/app/api/auth/register/route";
+import { LOGIN_RATE_LIMIT } from "@/server/auth/rate-limit";
 import { User } from "@/server/models/user";
 import { makeRequest, sessionFrom, signUp } from "./helpers";
 
@@ -66,6 +67,26 @@ describe("auth", () => {
     const res = await me(makeRequest("GET", "/api/auth/me"), undefined);
     expect(res.status).toBe(401);
     expect(await res.json()).toEqual({ error: { code: "UNAUTHORIZED", message: "Authentication required" } });
+  });
+
+  it("rate-limits repeated failed logins with 429 and Retry-After, per IP + email", async () => {
+    const { email, password } = await signUp();
+    const attempt = (pw: string, ip = "203.0.113.7") => {
+      const req = makeRequest("POST", "/api/auth/login", { body: { email, password: pw } });
+      req.headers.set("x-forwarded-for", ip);
+      return login(req, undefined);
+    };
+
+    for (let i = 0; i < LOGIN_RATE_LIMIT.MAX_FAILURES; i++) expect((await attempt("wrong-pass")).status).toBe(401);
+
+    // Even the correct password is refused while throttled.
+    const blocked = await attempt(password);
+    expect(blocked.status).toBe(429);
+    expect((await blocked.json()).error.code).toBe("RATE_LIMITED");
+    expect(Number(blocked.headers.get("retry-after"))).toBeGreaterThan(0);
+
+    // A different client IP is not affected, so the real user is not locked out.
+    expect((await attempt(password, "198.51.100.1")).status).toBe(200);
   });
 
   it("logout invalidates the session server-side, not just the cookie", async () => {

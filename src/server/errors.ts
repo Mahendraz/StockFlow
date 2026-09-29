@@ -28,5 +28,3 @@ export const conflict = (code: string, message: string, fields?: FieldErrors) =>
 
 export const validationError = (fields: FieldErrors, message = "Validation failed") =>
   new AppError(422, "VALIDATION_ERROR", message, fields);
-
-export const tooManyRequests = (message: string) => new AppError(429, "RATE_LIMITED", message);

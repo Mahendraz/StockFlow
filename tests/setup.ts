@@ -12,6 +12,8 @@ beforeAll(async () => {
 
 // Every test starts from empty collections (deleteMany keeps the indexes).
 beforeEach(async () => {
+  const { resetLoginRateLimits } = await import("@/server/auth/rate-limit");
+  resetLoginRateLimits();
   await Promise.all(Object.values(mongoose.connection.collections).map((c) => c.deleteMany({})));
 });
 
