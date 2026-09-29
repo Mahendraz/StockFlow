@@ -6,7 +6,13 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "typecheck": "next typegen && tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "db:up": "docker compose up -d --wait",
+    "db:down": "docker compose down",
+    "db:seed": "tsx scripts/seed.ts"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.104.0",
@@ -30,5 +36,13 @@
     "typescript": "^5",
     "vite-tsconfig-paths": "^6.1.1",
     "vitest": "^5.0.2"
+  },
+  "engines": {
+    "node": ">=20.9"
+  },
+  "config": {
+    "mongodbMemoryServer": {
+      "version": "7.0.14"
+    }
   }
 }

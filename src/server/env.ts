@@ -5,6 +5,8 @@ const envSchema = z.object({
   MONGODB_URI: z.string().min(1, "MONGODB_URI is required"),
   TAX_RATE: z.string().default("0.11"),
   SESSION_TTL_HOURS: z.coerce.number().int().positive().default(12),
+  // bcrypt work factor. 12 is a sensible production default; tests lower it for speed.
+  BCRYPT_COST: z.coerce.number().int().min(4).max(15).default(12),
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
 });
 
