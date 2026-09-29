@@ -44,7 +44,7 @@ export function ProductDialog({ product, onClose }: { product: ProductDTO | null
     save.mutate({
       sku: form.sku,
       name: form.name,
-      description: form.description || undefined,
+      description: form.description, // always sent: an empty string is how an edit clears it
       unitPrice,
       quantityOnHand: quantity,
     });

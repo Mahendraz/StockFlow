@@ -37,6 +37,18 @@ describe("products", () => {
     expect(gone.status).toBe(404);
   });
 
+  it("clears a description when it is updated to an empty string", async () => {
+    const { data } = await (await createProduct({ ...widget, description: "Blue, 10 cm" })).json();
+    expect(data.description).toBe("Blue, 10 cm");
+
+    const res = await PATCH(
+      makeRequest("PATCH", `/api/products/${data.id}`, { cookie, body: { description: "" } }),
+      idCtx(data.id),
+    );
+    expect(res.status).toBe(200);
+    expect((await res.json()).data.description).toBeNull();
+  });
+
   it("returns field-level 422 errors for invalid input", async () => {
     const res = await createProduct({ sku: "", name: "X", unitPrice: -1, quantityOnHand: 1.5 });
     expect(res.status).toBe(422);

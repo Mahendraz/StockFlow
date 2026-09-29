@@ -23,7 +23,7 @@ export function toProductDTO(p: ProductRecord): ProductDTO {
     id: p._id.toString(),
     sku: p.sku,
     name: p.name,
-    description: p.description ?? null,
+    description: p.description || null, // a cleared description is stored as "" and reads back as null
     unitPrice: p.unitPrice,
     quantityOnHand: p.quantityOnHand,
     createdAt: p.createdAt.toISOString(),
