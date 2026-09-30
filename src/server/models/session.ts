@@ -1,3 +1,5 @@
+// Mongoose model for login sessions: one row per sign-in, deleted on logout or by the TTL index after expiry.
+
 import { Schema, model, models, type InferSchemaType, type Model } from "mongoose";
 
 const sessionSchema = new Schema({

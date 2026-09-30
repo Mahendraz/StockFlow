@@ -9,7 +9,9 @@ import { MongoMemoryReplSet } from "mongodb-memory-server";
 const dbPath = ".data/mongo";
 mkdirSync(dbPath, { recursive: true });
 
+/** Starts the database and keeps it running until Ctrl+C (SIGINT) or SIGTERM. */
 async function main() {
+  // A replica set (even a one-node one) is required for transactions, which every invoice write uses.
   const replSet = await MongoMemoryReplSet.create({
     replSet: { name: "rs0", count: 1, storageEngine: "wiredTiger" },
     instanceOpts: [{ port: 27017, dbPath }],

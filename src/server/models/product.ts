@@ -1,5 +1,8 @@
+// Mongoose model for products. Each belongs to one user and holds its current stock (quantityOnHand).
+
 import { Schema, model, models, type HydratedDocument, type InferSchemaType, type Model } from "mongoose";
 
+/** A required whole number ≥ 0 that fits safely in a JS number. */
 const nonNegativeInt = {
   type: Number,
   required: true,
@@ -23,6 +26,7 @@ const productSchema = new Schema(
 
 // SKU is unique per user (each user is their own workspace), not globally.
 productSchema.index({ userId: 1, sku: 1 }, { unique: true });
+// For the product list, which is sorted by name.
 productSchema.index({ userId: 1, name: 1 });
 
 export type ProductFields = InferSchemaType<typeof productSchema>;

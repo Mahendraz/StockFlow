@@ -1,3 +1,5 @@
+// Route /invoices/new: the "New invoice" form.
+
 import { InvoiceForm } from "@/components/InvoiceForm";
 import { env } from "@/server/env";
 

@@ -1,5 +1,7 @@
 "use client";
 
+// Invoice form used by /invoices/new (create) and /invoices/[id]/edit (edit a DRAFT).
+
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -10,6 +12,7 @@ import { computeTotals, type PricedLine } from "@/lib/invoice-totals";
 import { formatMinor, formatRateBps, multiply } from "@/lib/money";
 import { ErrorBanner, Field, FieldErrorText } from "./ui";
 
+// One line of the form. `key` is a local id for React lists; quantity stays text while the user types.
 interface Line {
   key: number;
   productId: string;
@@ -17,12 +20,14 @@ interface Line {
 }
 
 const today = () => new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD in local time
+// Adds days to a YYYY-MM-DD date, in UTC so the time zone can't shift the day.
 const plusDays = (date: string, days: number) => {
   const d = new Date(`${date}T00:00:00Z`);
   d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().slice(0, 10);
 };
 
+// Creates a form line with a new unique key (default: no product, quantity 1).
 let nextKey = 1;
 const newLine = (productId = "", quantity = "1"): Line => ({ key: nextKey++, productId, quantity });
 
@@ -33,6 +38,7 @@ const newLine = (productId = "", quantity = "1"): Line => ({ key: nextKey++, pro
 export function InvoiceForm({ taxRateBps, invoice }: { taxRateBps: number; invoice?: InvoiceDTO }) {
   const router = useRouter();
   const queryClient = useQueryClient();
+  // Header fields. A new invoice starts dated today and due 30 days later.
   const issue = invoice?.issueDate ?? today();
   const [form, setForm] = useState({
     customerName: invoice?.customerName ?? "",
@@ -40,6 +46,7 @@ export function InvoiceForm({ taxRateBps, invoice }: { taxRateBps: number; invoi
     dueDate: invoice?.dueDate ?? plusDays(issue, 30),
     notes: invoice?.notes ?? "",
   });
+  // Line items: taken from the invoice when editing, otherwise one empty line.
   const [lines, setLines] = useState<Line[]>(() =>
     invoice ? invoice.items.map((i) => newLine(i.productId, String(i.quantity))) : [newLine()],
   );
@@ -53,6 +60,8 @@ export function InvoiceForm({ taxRateBps, invoice }: { taxRateBps: number; invoi
   // Lines already on a draft keep their snapshot price, exactly like the server does.
   const snapshotById = new Map((invoice?.items ?? []).map((i) => [i.productId, i]));
 
+  // Preview helpers: a line's price (snapshot first, then current price), its quantity (not a whole number = 0),
+  // and its line total (null when there is no price yet or the amount is too large).
   const priceOf = (productId: string) => snapshotById.get(productId)?.unitPrice ?? productById.get(productId)?.unitPrice;
   const qtyOf = (line: Line) => (/^\d+$/.test(line.quantity) ? Number(line.quantity) : 0);
   const lineTotalOf = (unitPrice: number | undefined, qty: number) => {
@@ -64,6 +73,7 @@ export function InvoiceForm({ taxRateBps, invoice }: { taxRateBps: number; invoi
     }
   };
 
+  // Live totals preview using the same computeTotals() as the server. Lines without a product are left out.
   const priced: PricedLine[] = lines.flatMap((l) => {
     const unitPrice = priceOf(l.productId);
     return unitPrice === undefined ? [] : [{ unitPrice, quantity: qtyOf(l) }];
@@ -75,6 +85,8 @@ export function InvoiceForm({ taxRateBps, invoice }: { taxRateBps: number; invoi
     preview = null; // absurdly large quantity; the server will reject it with a message
   }
 
+  // Save: PATCH /api/invoices/:id when editing, POST /api/invoices when creating.
+  // On success: cache the returned invoice, refresh the invoice list, and open the invoice.
   const save = useMutation({
     mutationFn: (body: Record<string, unknown>) =>
       invoice
@@ -87,6 +99,7 @@ export function InvoiceForm({ taxRateBps, invoice }: { taxRateBps: number; invoi
     },
   });
 
+  /** Sends header fields plus productId + quantity per line. The server works out prices and totals. */
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     save.mutate({
@@ -95,10 +108,13 @@ export function InvoiceForm({ taxRateBps, invoice }: { taxRateBps: number; invoi
     });
   }
 
+  // Updates one line (found by its key) and leaves the others unchanged.
   const updateLine = (key: number, patch: Partial<Line>) =>
     setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l)));
 
+  // Field messages from the last failed save, keyed by path (e.g. "customerName", "items.1.quantity").
   const errors = fieldErrors(save.error);
+  // Returns an onChange handler that updates one header field.
   const set = (key: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setForm({ ...form, [key]: e.target.value });
 
@@ -109,6 +125,7 @@ export function InvoiceForm({ taxRateBps, invoice }: { taxRateBps: number; invoi
       {save.error && <ErrorBanner message={errorMessage(save.error)} />}
       {products.error && <ErrorBanner message={errorMessage(products.error)} onRetry={() => products.refetch()} />}
 
+      {/* Header fields: customer, dates, notes */}
       <div className="card grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div className="sm:col-span-3">
           <Field label="Customer name" htmlFor="customerName" errors={errors.customerName}>
@@ -128,6 +145,7 @@ export function InvoiceForm({ taxRateBps, invoice }: { taxRateBps: number; invoi
         </div>
       </div>
 
+      {/* Line items: product, quantity, unit price, line total, remove button */}
       <div className="card space-y-3">
         <h2 className="font-medium">Line items</h2>
         <FieldErrorText errors={errors.items} />
@@ -146,6 +164,7 @@ export function InvoiceForm({ taxRateBps, invoice }: { taxRateBps: number; invoi
           const product = productById.get(line.productId);
           const unitPrice = priceOf(line.productId);
           const qty = qtyOf(line);
+          // Products picked on other lines are disabled here, so a product can't appear twice.
           const chosenElsewhere = new Set(lines.filter((l) => l.key !== line.key).map((l) => l.productId));
           return (
             <div key={line.key} className="grid grid-cols-2 items-start gap-2 border-b border-slate-100 pb-3 sm:grid-cols-[1fr_6rem_7rem_7rem_auto]">
@@ -181,6 +200,7 @@ export function InvoiceForm({ taxRateBps, invoice }: { taxRateBps: number; invoi
                   onChange={(e) => updateLine(line.key, { quantity: e.target.value })}
                   aria-invalid={!!errors[`items.${i}.quantity`]}
                 />
+                {/* Early stock warning only; the server checks stock again when saving and when issuing */}
                 {product && qty > product.quantityOnHand && !errors[`items.${i}.quantity`] && (
                   <p className="mt-1 text-xs text-amber-700">Only {product.quantityOnHand} in stock</p>
                 )}
@@ -210,6 +230,7 @@ export function InvoiceForm({ taxRateBps, invoice }: { taxRateBps: number; invoi
           + Add line
         </button>
 
+        {/* Totals preview; the server recalculates everything on save */}
         <dl className="ml-auto w-full max-w-xs space-y-1 pt-2 text-sm">
           <div className="flex justify-between">
             <dt className="text-slate-600">Subtotal</dt>

@@ -1,3 +1,5 @@
+// Invoice business rules: create and edit drafts, change status, and move stock when that happens.
+
 import { Types, type ClientSession } from "mongoose";
 import { canTransition, type InvoiceStatus } from "@/lib/invoice-status";
 import { computeTotals } from "@/lib/invoice-totals";
@@ -10,8 +12,10 @@ import { Product } from "../models/product";
 import { parseObjectId, toPage, type Page } from "../validation";
 import type { InvoiceCreateInput, InvoiceLineInput, InvoiceListQuery, InvoiceUpdateInput } from "./invoice.schemas";
 
+/** Used when no due date is given: due date = issue date + 30 days. */
 const DEFAULT_PAYMENT_TERM_DAYS = 30;
 
+/** One line as the API returns it: a snapshot of the product taken when the line was added. */
 export interface InvoiceItemDTO {
   productId: string;
   productName: string;
@@ -21,6 +25,7 @@ export interface InvoiceItemDTO {
   lineTotal: number;
 }
 
+/** An invoice as the list shows it (no lines). Dates are "YYYY-MM-DD", money is in minor units. */
 export interface InvoiceSummaryDTO {
   id: string;
   invoiceNumber: string;
@@ -32,6 +37,7 @@ export interface InvoiceSummaryDTO {
   createdAt: string;
 }
 
+/** A full invoice as the API returns it: summary fields plus notes, lines and totals. */
 export interface InvoiceDTO extends InvoiceSummaryDTO {
   notes: string | null;
   items: InvoiceItemDTO[];
@@ -46,17 +52,22 @@ type InvoiceRecord = InvoiceFields & { _id: Types.ObjectId; createdAt: Date; upd
 
 // ---------------------------------------------------------------- dates (stored as UTC midnight)
 
+/** Date → "YYYY-MM-DD" (UTC). */
 const toDateOnly = (d: Date) => d.toISOString().slice(0, 10);
+/** "YYYY-MM-DD" → Date at UTC midnight. */
 const fromDateOnly = (s: string) => new Date(`${s}T00:00:00Z`);
+/** Today's date at UTC midnight. */
 const todayUtc = () => fromDateOnly(toDateOnly(new Date()));
 const addDays = (d: Date, days: number) => new Date(d.getTime() + days * 86_400_000);
 
+/** Throws 422 when the due date is before the issue date. */
 function assertDueAfterIssue(issueDate: Date, dueDate: Date) {
   if (dueDate < issueDate) throw validationError({ dueDate: ["Due date cannot be before the issue date"] });
 }
 
 // ---------------------------------------------------------------- mapping
 
+/** Converts a stored invoice to the list shape (string id, "YYYY-MM-DD" issue and due dates). */
 function toSummaryDTO(inv: InvoiceRecord): InvoiceSummaryDTO {
   return {
     id: inv._id.toString(),
@@ -70,6 +81,7 @@ function toSummaryDTO(inv: InvoiceRecord): InvoiceSummaryDTO {
   };
 }
 
+/** Converts a stored invoice to the full API shape, lines and totals included. */
 function toInvoiceDTO(inv: InvoiceRecord): InvoiceDTO {
   return {
     ...toSummaryDTO(inv),
@@ -108,11 +120,13 @@ async function buildItems(
   const productById = new Map(products.map((p) => [p._id.toString(), p]));
   const snapshotById = new Map(existing.map((i) => [i.productId.toString(), i]));
 
+  // Collect problems before throwing, so one error lists every missing product (422) or every short line (409).
   const missing: FieldErrors = {};
   const shortages: string[] = [];
   const shortageFields: FieldErrors = {};
 
   const items = lines.map((line, i) => {
+    // Map keys are lower-case ObjectId strings; the client may send upper-case hex.
     const product = productById.get(line.productId.toLowerCase());
     if (!product) {
       missing[`items.${i}.productId`] = ["Product not found"];
@@ -149,6 +163,7 @@ function applyTotals(items: InvoiceItem[], taxRateBps: number) {
 /** INV-2026-0001, numbered per user per year via an atomic counter. */
 async function nextInvoiceNumber(userId: Types.ObjectId, session: ClientSession): Promise<string> {
   const year = new Date().getUTCFullYear();
+  // $inc is atomic; upsert creates the counter on the user's first invoice of the year.
   const counter = await Counter.findOneAndUpdate(
     { userId, year },
     { $inc: { seq: 1 } },
@@ -159,11 +174,13 @@ async function nextInvoiceNumber(userId: Types.ObjectId, session: ClientSession)
 
 // ---------------------------------------------------------------- queries
 
+/** Lists the user's invoices, newest first, with an optional status filter and pagination. */
 export async function listInvoices(userId: Types.ObjectId, query: InvoiceListQuery): Promise<Page<InvoiceSummaryDTO>> {
   const filter: Record<string, unknown> = { userId };
   if (query.status) filter.status = query.status;
   const [rows, total] = await Promise.all([
     Invoice.find(filter)
+      // The list does not need line items.
       .select("-items")
       .sort({ createdAt: -1, _id: -1 })
       .skip((query.page - 1) * query.pageSize)
@@ -174,6 +191,7 @@ export async function listInvoices(userId: Types.ObjectId, query: InvoiceListQue
   return toPage(rows.map(toSummaryDTO), total, query);
 }
 
+/** Returns one of the user's invoices. Another user's id, or a malformed id, is 404. */
 export async function getInvoice(userId: Types.ObjectId, id: string): Promise<InvoiceDTO> {
   const invoice = await Invoice.findOne({ _id: parseObjectId(id, "Invoice"), userId }).lean<InvoiceRecord>();
   if (!invoice) throw notFound("Invoice");
@@ -188,6 +206,7 @@ export async function createInvoice(userId: Types.ObjectId, input: InvoiceCreate
   const dueDate = input.dueDate ? fromDateOnly(input.dueDate) : addDays(issueDate, DEFAULT_PAYMENT_TERM_DAYS);
   assertDueAfterIssue(issueDate, dueDate);
 
+  // One transaction: if saving fails, the invoice number taken from the counter is rolled back too.
   return withTransaction(async (session) => {
     const items = await buildItems(userId, input.items, [], session);
     const [invoice] = await Invoice.create(
@@ -226,6 +245,7 @@ export async function updateInvoice(userId: Types.ObjectId, id: string, input: I
     assertDueAfterIssue(invoice.issueDate, invoice.dueDate);
 
     if (input.items !== undefined) {
+      // Pass the current lines, so products already on the invoice keep their snapshot price.
       const existing = invoice.toObject().items as InvoiceItem[];
       const items = await buildItems(userId, input.items, existing, session);
       invoice.set(applyTotals(items, env().taxRateBps));
@@ -282,6 +302,7 @@ async function consumeStock(userId: Types.ObjectId, items: InvoiceItem[], sessio
       { $inc: { quantityOnHand: -item.quantity } },
       { session },
     );
+    // No match = not enough stock left. Read the current amount only to build the error message.
     if (result.matchedCount === 0) {
       const product = await Product.findOne({ _id: item.productId, userId }).session(session).lean();
       throw conflict(
@@ -292,6 +313,7 @@ async function consumeStock(userId: Types.ObjectId, items: InvoiceItem[], sessio
   }
 }
 
+/** Adds each line's quantity back to its product. Used when an ISSUED invoice is cancelled. */
 async function restoreStock(userId: Types.ObjectId, items: InvoiceItem[], session: ClientSession) {
   for (const item of items) {
     // Products referenced by invoices cannot be deleted, so the product is always there.

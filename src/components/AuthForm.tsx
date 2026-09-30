@@ -8,20 +8,27 @@ import { ErrorBanner, Field } from "./ui";
 
 type Mode = "login" | "register";
 
+// Texts and API endpoint for each mode.
 const copy = {
   login: { title: "Sign in to StockFlow", submit: "Sign in", busy: "Signing in…", endpoint: "/api/auth/login" },
   register: { title: "Create your account", submit: "Create account", busy: "Creating…", endpoint: "/api/auth/register" },
 } as const;
 
+/**
+ * Shared form for /login and /register: sends email + password to the API.
+ * On success the server has set the session cookie, and the page moves on to `next`.
+ */
 export function AuthForm({ mode, next }: { mode: Mode; next: string }) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  // Request state and the server's errors: one banner message plus per-field messages.
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fields, setFields] = useState<FieldErrors>({});
   const text = copy[mode];
 
+  /** Posts the form. On success: go to `next` and refresh, so the server layouts see the new session. */
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setPending(true);
@@ -75,6 +82,7 @@ export function AuthForm({ mode, next }: { mode: Mode; next: string }) {
       <button type="submit" className="btn btn-primary w-full" disabled={pending}>
         {pending ? text.busy : text.submit}
       </button>
+      {/* Link to the other form (login ↔ register) */}
       <p className="text-center text-sm text-slate-600">
         {mode === "login" ? (
           <>

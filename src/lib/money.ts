@@ -6,6 +6,7 @@
 
 export const MINOR_UNITS_PER_MAJOR = 100;
 
+/** Thrown for an invalid or too-large amount; the API turns it into a 422. */
 export class MoneyError extends Error {}
 
 /** Throws unless `value` is a non-negative safe integer. */
@@ -23,6 +24,7 @@ export function multiply(unitPrice: number, quantity: number): number {
   return Number(result);
 }
 
+/** Adds amounts with BigInt; throws MoneyError if the total is above Number.MAX_SAFE_INTEGER. */
 export function sum(values: number[]): number {
   const result = values.reduce((acc, v) => acc + BigInt(v), BigInt(0));
   if (result > BigInt(Number.MAX_SAFE_INTEGER)) throw new MoneyError("Amount is too large");
@@ -35,6 +37,7 @@ export function sum(values: number[]): number {
  */
 export function taxFor(subtotal: number, rateBps: number): number {
   const scaled = BigInt(subtotal) * BigInt(rateBps);
+  // BigInt division drops the fraction; adding half the divisor (5000) first makes it round half-up.
   return Number((scaled + BigInt(5000)) / BigInt(10000));
 }
 
@@ -45,6 +48,7 @@ export function taxFor(subtotal: number, rateBps: number): number {
 export function parseTaxRateBps(raw: string): number {
   const match = /^(0|1)(?:\.(\d{1,4}))?$/.exec(raw.trim());
   if (!match) throw new MoneyError(`Invalid tax rate "${raw}": use a fraction like 0.11 (max 4 decimals)`);
+  // "0.11" → 0 × 10000 + "11" padded to "1100" = 1100 basis points.
   const bps = Number(match[1]) * 10000 + Number((match[2] ?? "").padEnd(4, "0"));
   if (bps > 10000) throw new MoneyError(`Invalid tax rate "${raw}": must be between 0 and 1`);
   return bps;

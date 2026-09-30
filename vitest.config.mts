@@ -1,3 +1,5 @@
+// Test runner config: Node environment, one in-memory MongoDB shared by all test files (see tests/global-setup.ts).
+
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({

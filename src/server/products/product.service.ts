@@ -1,3 +1,5 @@
+// Product business rules: list/search, create, update and delete, always scoped to the signed-in user.
+
 import type { Types } from "mongoose";
 import { conflict, notFound } from "../errors";
 import { Invoice } from "../models/invoice";
@@ -5,6 +7,7 @@ import { Product, type ProductFields } from "../models/product";
 import { escapeRegex, parseObjectId, toPage, type Page } from "../validation";
 import type { ProductInput, ProductListQuery, ProductUpdate } from "./product.schemas";
 
+/** A product as the API returns it. unitPrice is in minor units. */
 export interface ProductDTO {
   id: string;
   sku: string;
@@ -18,6 +21,7 @@ export interface ProductDTO {
 
 type ProductRecord = ProductFields & { _id: Types.ObjectId; createdAt: Date; updatedAt: Date };
 
+/** Converts a stored product to the API shape. */
 export function toProductDTO(p: ProductRecord): ProductDTO {
   return {
     id: p._id.toString(),
@@ -33,14 +37,17 @@ export function toProductDTO(p: ProductRecord): ProductDTO {
 
 // Every query below filters by userId: a user can never read or touch another user's products.
 
+/** Lists the user's products sorted by name, with optional search (name or SKU) and pagination. */
 export async function listProducts(userId: Types.ObjectId, query: ProductListQuery): Promise<Page<ProductDTO>> {
   const filter: Record<string, unknown> = { userId };
   if (query.q) {
+    // Case-insensitive "contains" match. The input is escaped, so ".*" is searched as plain text.
     const pattern = new RegExp(escapeRegex(query.q), "i");
     filter.$or = [{ name: pattern }, { sku: pattern }];
   }
   const [rows, total] = await Promise.all([
     Product.find(filter)
+      // _id breaks ties between equal names, so rows never jump between pages.
       .sort({ name: 1, _id: 1 })
       .skip((query.page - 1) * query.pageSize)
       .limit(query.pageSize)
@@ -50,12 +57,14 @@ export async function listProducts(userId: Types.ObjectId, query: ProductListQue
   return toPage(rows.map(toProductDTO), total, query);
 }
 
+/** Returns one of the user's products, or 404. */
 export async function getProduct(userId: Types.ObjectId, id: string): Promise<ProductDTO> {
   const product = await Product.findOne({ _id: parseObjectId(id, "Product"), userId }).lean<ProductRecord>();
   if (!product) throw notFound("Product");
   return toProductDTO(product);
 }
 
+/** Creates a product for the user. A duplicate SKU hits the unique index and becomes 409 (see http.ts). */
 export async function createProduct(userId: Types.ObjectId, input: ProductInput): Promise<ProductDTO> {
   const product = await Product.create({ ...input, userId });
   return toProductDTO(product.toObject() as ProductRecord);
@@ -69,6 +78,7 @@ export async function updateProduct(userId: Types.ObjectId, id: string, input: P
   const product = await Product.findOneAndUpdate(
     { _id: parseObjectId(id, "Product"), userId },
     { $set: input },
+    // runValidators: updates must pass the same schema rules as creates (e.g. whole numbers).
     { returnDocument: "after", runValidators: true },
   ).lean<ProductRecord>();
   if (!product) throw notFound("Product");

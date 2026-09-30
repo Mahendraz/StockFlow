@@ -1,6 +1,9 @@
+// Server configuration read from environment variables.
+
 import { z } from "zod";
 import { parseTaxRateBps } from "@/lib/money";
 
+/** The variables the server reads, with defaults. MONGODB_URI has none, so it must be set. */
 const envSchema = z.object({
   MONGODB_URI: z.string().min(1, "MONGODB_URI is required"),
   TAX_RATE: z.string().default("0.11"),
@@ -10,6 +13,7 @@ const envSchema = z.object({
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
 });
 
+/** Parsed config, plus TAX_RATE converted to basis points (0.11 → 1100). */
 export type Env = z.infer<typeof envSchema> & { taxRateBps: number };
 
 let cached: Env | undefined;

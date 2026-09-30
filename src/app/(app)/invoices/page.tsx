@@ -12,11 +12,14 @@ import { formatMinor } from "@/lib/money";
 
 const PAGE_SIZE = 10;
 
+/** Route /invoices: the user's invoices, newest first, with a status filter and pagination (GET /api/invoices). */
 export default function InvoicesPage() {
   const router = useRouter();
+  // Status filter ("" = all) and current page. Changing the filter jumps back to page 1.
   const [status, setStatus] = useState<InvoiceStatus | "">("");
   const [page, setPage] = useState(1);
 
+  // One cached request per filter + page. keepPreviousData keeps the old rows (dimmed) while the next page loads.
   const invoices = useQuery({
     queryKey: ["invoices", { status, page }],
     queryFn: () => {
@@ -38,6 +41,7 @@ export default function InvoicesPage() {
         </Link>
       </div>
 
+      {/* Status filter */}
       <div className="flex items-center gap-2">
         <label htmlFor="status" className="text-sm text-slate-600">
           Status
@@ -62,6 +66,7 @@ export default function InvoicesPage() {
 
       {invoices.error && <ErrorBanner message={errorMessage(invoices.error)} onRetry={() => invoices.refetch()} />}
 
+      {/* Invoice table: clicking a row opens that invoice */}
       <div className="card overflow-x-auto p-0">
         <table className="table">
           <thead>

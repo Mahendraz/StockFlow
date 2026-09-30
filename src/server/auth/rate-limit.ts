@@ -12,8 +12,10 @@ import { AppError } from "../errors";
 const WINDOW_MS = 15 * 60 * 1000;
 const MAX_FAILURES = 10;
 
+/** Failed-login timestamps (ms) per "ip|email" key. */
 const failures = new Map<string, number[]>();
 
+/** 429 RATE_LIMITED. http.ts also sends retryAfterSeconds as the Retry-After header. */
 export class RateLimitError extends AppError {
   constructor(readonly retryAfterSeconds: number) {
     super(429, "RATE_LIMITED", `Too many failed login attempts. Try again in ${Math.ceil(retryAfterSeconds / 60)} minute(s).`);
@@ -25,6 +27,7 @@ export function clientIp(headers: Headers): string {
   return headers.get("x-forwarded-for")?.split(",")[0].trim() || headers.get("x-real-ip") || "unknown";
 }
 
+/** Returns a key's failures that are still inside the window, and forgets the older ones. */
 function recent(key: string, now: number): number[] {
   const list = (failures.get(key) ?? []).filter((t) => now - t < WINDOW_MS);
   if (list.length > 0) failures.set(key, list);
@@ -32,6 +35,7 @@ function recent(key: string, now: number): number[] {
   return list;
 }
 
+/** Throws 429 if the key already has MAX_FAILURES recent failures. Runs before the password is checked. */
 export function assertLoginAllowed(key: string, now = Date.now()): void {
   const list = recent(key, now);
   if (list.length >= MAX_FAILURES) {
@@ -39,10 +43,12 @@ export function assertLoginAllowed(key: string, now = Date.now()): void {
   }
 }
 
+/** Records one failed login (wrong email or password) for the key. */
 export function recordLoginFailure(key: string, now = Date.now()): void {
   failures.set(key, [...recent(key, now), now]);
 }
 
+/** Forgets a key's failures; called after a successful login. */
 export function clearLoginFailures(key: string): void {
   failures.delete(key);
 }
@@ -52,4 +58,5 @@ export function resetLoginRateLimits(): void {
   failures.clear();
 }
 
+/** The limits, exported so tests can use them. */
 export const LOGIN_RATE_LIMIT = { WINDOW_MS, MAX_FAILURES };

@@ -5,6 +5,7 @@ export interface PricedLine {
   quantity: number;
 }
 
+/** Every amount is in minor units; lineTotals follows the order of the input lines. */
 export interface InvoiceTotals {
   lineTotals: number[];
   subtotal: number;

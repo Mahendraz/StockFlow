@@ -6,17 +6,20 @@ import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import { api } from "@/lib/api-client";
 
+// Nav links. The one whose path the current URL starts with is highlighted.
 const links = [
   { href: "/products", label: "Products" },
   { href: "/invoices", label: "Invoices" },
 ];
 
+/** Top bar on every signed-in page: app name, nav links, the user's email, and the Log out button. */
 export function AppNav({ email }: { email: string }) {
   const pathname = usePathname();
   const router = useRouter();
   const queryClient = useQueryClient();
   const [loggingOut, setLoggingOut] = useState(false);
 
+  /** Logs out (POST /api/auth/logout), then clears cached data and goes to /login, even if the request failed. */
   async function logout() {
     setLoggingOut(true);
     try {

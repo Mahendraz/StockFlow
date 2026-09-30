@@ -1,3 +1,5 @@
+// MongoDB connection (opened once per server process) and the transaction helper.
+
 import mongoose, { type ClientSession } from "mongoose";
 import { env } from "./env";
 import { Counter } from "./models/counter";
@@ -9,6 +11,7 @@ import { User } from "./models/user";
 // Cached on globalThis so Next.js hot reload reuses one connection instead of opening a new one per edit.
 const globalForDb = globalThis as unknown as { stockflowDb?: Promise<typeof mongoose> };
 
+/** Opens the MongoDB connection on first use and reuses it after that. API handlers call it first (see http.ts). */
 export function connectDb(): Promise<typeof mongoose> {
   if (!globalForDb.stockflowDb) {
     globalForDb.stockflowDb = mongoose

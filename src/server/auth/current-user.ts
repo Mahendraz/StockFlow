@@ -13,6 +13,7 @@ export async function getCurrentUser(): Promise<PublicUser | null> {
   await connectDb();
   const auth = await findUserByToken(token);
   if (!auth) return null;
+  // getPublicUser throws if the user row is gone; treat that as signed out.
   try {
     return await getPublicUser(auth);
   } catch {

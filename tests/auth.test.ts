@@ -8,6 +8,8 @@ import { User } from "@/server/models/user";
 import { makeRequest, sessionFrom, signUp } from "./helpers";
 
 describe("auth", () => {
+  // Register returns 201, lowercases the email and sets an HttpOnly cookie;
+  // the DB holds a bcrypt hash, never the plain password.
   it("registers a user and stores only a bcrypt hash of the password", async () => {
     const res = await register(
       makeRequest("POST", "/api/auth/register", { body: { email: "New@Example.com", password: "s3cure-pass" } }),
@@ -22,6 +24,7 @@ describe("auth", () => {
     expect(stored!.passwordHash).toMatch(/^\$2[aby]\$/); // bcrypt format, salt embedded
   });
 
+  // Password policy lives on the server: a taken email is 409, a password under 8 chars is 422 with a field message.
   it("rejects a duplicate email with 409 and a weak password with 422 (server-side policy)", async () => {
     await signUp("taken@example.com");
     const dup = await register(
@@ -38,6 +41,7 @@ describe("auth", () => {
     expect((await weak.json()).error.fields.password[0]).toMatch(/at least 8/);
   });
 
+  // Wrong password and unknown email give byte-identical 401s and no session, so accounts cannot be enumerated.
   it("(a) rejects a wrong password with a generic 401 that does not reveal which part was wrong", async () => {
     const { email } = await signUp();
     const wrongPassword = await login(
@@ -56,6 +60,7 @@ describe("auth", () => {
     expect(sessionFrom(wrongPassword)).toBeUndefined();
   });
 
+  // Happy path: correct email + password returns 200 and a session cookie.
   it("logs in with correct credentials", async () => {
     const { email, password } = await signUp();
     const res = await login(makeRequest("POST", "/api/auth/login", { body: { email, password } }), undefined);
@@ -63,12 +68,15 @@ describe("auth", () => {
     expect(sessionFrom(res)).toBeTruthy();
   });
 
+  // A protected route without a cookie returns 401 UNAUTHORIZED.
   it("(b) returns 401 for a protected route without a session", async () => {
     const res = await me(makeRequest("GET", "/api/auth/me"), undefined);
     expect(res.status).toBe(401);
     expect(await res.json()).toEqual({ error: { code: "UNAUTHORIZED", message: "Authentication required" } });
   });
 
+  // After MAX_FAILURES wrong passwords from one IP + email, even the right password gets 429 with Retry-After;
+  // the same account from another IP still logs in, so an attacker cannot lock the real user out.
   it("rate-limits repeated failed logins with 429 and Retry-After, per IP + email", async () => {
     const { email, password } = await signUp();
     const attempt = (pw: string, ip = "203.0.113.7") => {
@@ -89,6 +97,7 @@ describe("auth", () => {
     expect((await attempt(password, "198.51.100.1")).status).toBe(200);
   });
 
+  // Logout deletes the session in the DB: replaying the old cookie afterwards returns 401.
   it("logout invalidates the session server-side, not just the cookie", async () => {
     const { cookie } = await signUp();
     expect((await me(makeRequest("GET", "/api/auth/me", { cookie }), undefined)).status).toBe(200);

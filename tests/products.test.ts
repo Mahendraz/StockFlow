@@ -16,6 +16,7 @@ describe("products", () => {
     ({ cookie } = await signUp());
   });
 
+  // Full CRUD round trip; SKU is uppercased, and a deleted product then returns 404.
   it("creates, reads, updates and deletes a product", async () => {
     const created = await createProduct(widget);
     expect(created.status).toBe(201);
@@ -37,6 +38,7 @@ describe("products", () => {
     expect(gone.status).toBe(404);
   });
 
+  // PATCH with an empty description clears it (stored as null) instead of being ignored.
   it("clears a description when it is updated to an empty string", async () => {
     const { data } = await (await createProduct({ ...widget, description: "Blue, 10 cm" })).json();
     expect(data.description).toBe("Blue, 10 cm");
@@ -49,6 +51,7 @@ describe("products", () => {
     expect((await res.json()).data.description).toBeNull();
   });
 
+  // Invalid input returns 422 VALIDATION_ERROR with one entry per bad field (sku, unitPrice, quantityOnHand).
   it("returns field-level 422 errors for invalid input", async () => {
     const res = await createProduct({ sku: "", name: "X", unitPrice: -1, quantityOnHand: 1.5 });
     expect(res.status).toBe(422);
@@ -57,6 +60,7 @@ describe("products", () => {
     expect(Object.keys(error.fields).sort()).toEqual(["quantityOnHand", "sku", "unitPrice"]);
   });
 
+  // SKU is unique per user, case-insensitively: "WID-1" after "wid-1" is 409 on the sku field.
   it("rejects a duplicate SKU for the same user with 409 (case-insensitive)", async () => {
     await createProduct(widget);
     const dup = await createProduct({ ...widget, sku: "WID-1", name: "Other" });
@@ -64,12 +68,15 @@ describe("products", () => {
     expect((await dup.json()).error.fields).toHaveProperty("sku");
   });
 
+  // Uniqueness is scoped to the user: another user can reuse the same SKU.
   it("allows the same SKU for different users", async () => {
     await createProduct(widget);
     const other = await signUp();
     expect((await createProduct(widget, other.cookie)).status).toBe(201);
   });
 
+  // Search matches name or SKU, pagination returns the right slice and totals,
+  // and ".*" is searched literally (regex escaped).
   it("searches by name or SKU and paginates", async () => {
     for (let i = 1; i <= 5; i++) {
       await createProduct({ sku: `BOLT-${i}`, name: `Bolt ${i}`, unitPrice: 100, quantityOnHand: 1 });
@@ -88,6 +95,7 @@ describe("products", () => {
     expect((await weird.json()).total).toBe(0);
   });
 
+  // Another user's product is 404 to read and to edit, and never shows up in their list.
   it("does not let one user see or modify another user's product", async () => {
     const { data } = await (await createProduct(widget)).json();
     const intruder = await signUp();
@@ -104,6 +112,7 @@ describe("products", () => {
     expect(listed.total).toBe(0);
   });
 
+  // Every product endpoint returns 401 without a session.
   it("requires authentication on every product endpoint", async () => {
     const id = "000000000000000000000000";
     const responses = await Promise.all([

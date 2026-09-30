@@ -41,6 +41,8 @@ describe("invoices", () => {
     ({ cookie } = await signUp());
   });
 
+  // Totals are computed on the server from snapshot prices; totals sent by the client are ignored.
+  // Tax 11%, rounded half-up.
   it("computes line totals, subtotal, 11% tax and total on the server, ignoring client totals", async () => {
     const a = await product("A", 150000, 10); // 1,500.00
     const b = await product("B", 33333, 10); // 333.33
@@ -66,6 +68,7 @@ describe("invoices", () => {
     expect(data.total).toBe(443999);
   });
 
+  // Invoice numbers count up per user (…0001, …0002) with the same prefix.
   it("numbers invoices sequentially per user", async () => {
     const a = await product("A", 100, 10);
     const first = await draft([{ productId: a, quantity: 1 }]);
@@ -74,6 +77,7 @@ describe("invoices", () => {
     expect(first.invoiceNumber.slice(0, 9)).toBe(second.invoiceNumber.slice(0, 9));
   });
 
+  // Asking for more than stock on hand is 409 INSUFFICIENT_STOCK, naming the product and the available amount.
   it("(c) rejects invoicing more than the available stock, naming the product", async () => {
     const a = await product("A", 100, 3);
     const res = await create({ customerName: "Acme Ltd", items: [{ productId: a, quantity: 4 }] });
@@ -85,6 +89,7 @@ describe("invoices", () => {
     expect(error.fields).toHaveProperty("items.0.quantity");
   });
 
+  // Line rules: no empty invoice, quantity must be positive, the same product may not appear twice (all 422).
   it("validates line items: at least one line, positive quantity, no duplicate products", async () => {
     const a = await product("A", 100, 3);
     const empty = await create({ customerName: "Acme Ltd", items: [] });
@@ -100,6 +105,7 @@ describe("invoices", () => {
     expect((await dup.json()).error.fields).toHaveProperty("items.1.productId");
   });
 
+  // Impossible dates (Feb 30, month 13) and non-dates return 422 on issueDate, not a 500.
   it("rejects impossible or malformed dates with 422, not a server error", async () => {
     const a = await product("A", 100, 3);
     for (const date of ["2026-02-30", "2026-13-01", "2026-01-32", "tomorrow"]) {
@@ -109,6 +115,7 @@ describe("invoices", () => {
     }
   });
 
+  // A draft reserves nothing; issuing deducts stock for every line.
   it("(d) issuing decrements stock for every line", async () => {
     const a = await product("A", 100, 10);
     const b = await product("B", 200, 5);
@@ -125,6 +132,7 @@ describe("invoices", () => {
     expect(await stockOf(b)).toBe(0);
   });
 
+  // Cancelling an ISSUED invoice gives the stock back; cancelling a DRAFT changes nothing.
   it("(e) cancelling an issued invoice restores its stock; cancelling a draft restores nothing", async () => {
     const a = await product("A", 100, 10);
     const issued = await draft([{ productId: a, quantity: 4 }]);
@@ -141,6 +149,8 @@ describe("invoices", () => {
     expect(await stockOf(a)).toBe(10);
   });
 
+  // One short line makes the whole issue fail with 409: the other line's decrement is rolled back
+  // and the invoice stays DRAFT.
   it("issuing is all-or-nothing: one short line leaves every product untouched", async () => {
     const a = await product("A", 100, 5);
     const b = await product("B", 100, 5);
@@ -160,6 +170,8 @@ describe("invoices", () => {
     expect((await after.json()).data.status).toBe("DRAFT");
   });
 
+  // Two invoices issued at the same moment for more than the stock: exactly one wins (200),
+  // the other gets 409, stock never goes negative.
   it("concurrent issues of invoices competing for the same stock never oversell", async () => {
     const a = await product("A", 100, 5);
     const first = await draft([{ productId: a, quantity: 3 }]);
@@ -170,6 +182,7 @@ describe("invoices", () => {
     expect(await stockOf(a)).toBe(2);
   });
 
+  // Double-click / retry: the same invoice issued twice in parallel deducts stock only once.
   it("issuing the same invoice twice at once only decrements stock once", async () => {
     const a = await product("A", 100, 10);
     const inv = await draft([{ productId: a, quantity: 3 }]);
@@ -178,6 +191,7 @@ describe("invoices", () => {
     expect(await stockOf(a)).toBe(7);
   });
 
+  // Illegal moves are 409 INVALID_TRANSITION: can't pay a draft, can't issue twice, PAID and CANCELLED are final.
   it("enforces the status machine and rejects illegal transitions", async () => {
     const a = await product("A", 100, 10);
     const inv = await draft([{ productId: a, quantity: 1 }]);
@@ -201,6 +215,7 @@ describe("invoices", () => {
     expect((await action(issue, other.id)).status).toBe(409);
   });
 
+  // Line items are snapshots: renaming or repricing the product later does not change the invoice.
   it("changing a product's price later does not change an existing invoice", async () => {
     const a = await product("A", 1000, 10);
     const inv = await draft([{ productId: a, quantity: 2 }]);
@@ -215,6 +230,7 @@ describe("invoices", () => {
     expect(data.total).toBe(inv.total);
   });
 
+  // Draft lines can be edited and totals recomputed; once issued, edits are 409 INVOICE_NOT_EDITABLE.
   it("only lets DRAFT invoices be edited", async () => {
     const a = await product("A", 1000, 10);
     const b = await product("B", 500, 10);
@@ -239,6 +255,7 @@ describe("invoices", () => {
     expect((await locked.json()).error.code).toBe("INVOICE_NOT_EDITABLE");
   });
 
+  // A product used by any invoice cannot be deleted (409 PRODUCT_IN_USE), so history never points at a missing product.
   it("blocks deleting a product that an invoice references", async () => {
     const a = await product("A", 100, 10);
     await draft([{ productId: a, quantity: 1 }]);
@@ -247,6 +264,8 @@ describe("invoices", () => {
     expect((await res.json()).error.code).toBe("PRODUCT_IN_USE");
   });
 
+  // List supports a status filter and pagination, rejects an unknown status with 422,
+  // and never shows another user's invoices (404 on direct access).
   it("lists invoices with a status filter and pagination, scoped to the user", async () => {
     const a = await product("A", 100, 10);
     const one = await draft([{ productId: a, quantity: 1 }]);
@@ -270,6 +289,7 @@ describe("invoices", () => {
     expect(peek.status).toBe(404);
   });
 
+  // Every invoice endpoint, including issue/pay/cancel, returns 401 without a session.
   it("requires authentication on invoice endpoints", async () => {
     const id = "000000000000000000000000";
     const statuses = await Promise.all([

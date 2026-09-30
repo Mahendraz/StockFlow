@@ -1,7 +1,11 @@
+// Zod schemas for the auth API request bodies (register and login).
+
 import { z } from "zod";
 
+/** Trimmed and lower-cased, so " Bob@Example.com" and "bob@example.com" are the same account. */
 const email = z.string().trim().toLowerCase().pipe(z.email("Enter a valid email address").max(254));
 
+/** POST /api/auth/register body: a valid email and a password of at least 8 characters and at most 72 bytes. */
 export const registerSchema = z.object({
   email,
   password: z

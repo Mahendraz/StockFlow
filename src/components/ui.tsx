@@ -1,7 +1,10 @@
 "use client";
 
+// Small UI pieces shared by the screens: error banner, form field, pagination, status badge, table message.
+
 import type { InvoiceStatus } from "@/lib/invoice-status";
 
+/** Red alert box with a message, plus a Retry button when `onRetry` is given. */
 export function ErrorBanner({ message, onRetry }: { message: string; onRetry?: () => void }) {
   return (
     <div role="alert" className="flex items-center justify-between gap-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
@@ -41,11 +44,13 @@ export function Field({
   );
 }
 
+/** A field's error messages in red; renders nothing when there are none. */
 export function FieldErrorText({ errors }: { errors?: string[] }) {
   if (!errors?.length) return null;
   return <p className="mt-1 text-xs text-red-700">{errors.join(" ")}</p>;
 }
 
+/** "N total" with Prev/Next buttons; Prev is disabled on the first page, Next on the last. */
 export function Pagination({
   page,
   totalPages,
@@ -75,6 +80,7 @@ export function Pagination({
   );
 }
 
+// Badge colours for each invoice status.
 const statusStyles: Record<InvoiceStatus, string> = {
   DRAFT: "bg-slate-100 text-slate-700",
   ISSUED: "bg-blue-100 text-blue-800",
@@ -82,6 +88,7 @@ const statusStyles: Record<InvoiceStatus, string> = {
   CANCELLED: "bg-red-100 text-red-700",
 };
 
+/** Small coloured label showing an invoice status. */
 export function StatusBadge({ status }: { status: InvoiceStatus }) {
   return <span className={`rounded px-2 py-0.5 text-xs font-medium ${statusStyles[status]}`}>{status}</span>;
 }

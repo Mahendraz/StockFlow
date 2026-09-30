@@ -1,3 +1,5 @@
+// Shared plumbing for API route handlers: DB connection, auth, input parsing, and errors → JSON responses.
+
 import mongoose from "mongoose";
 import { NextResponse, type NextRequest } from "next/server";
 import { ZodError, type z } from "zod";
@@ -13,6 +15,7 @@ export function errorResponse(status: number, code: string, message: string, fie
   return NextResponse.json({ error: { code, message, ...(fields && { fields }) } }, { status });
 }
 
+/** Groups zod issues by field path, e.g. "items.1.quantity" → ["Quantity must be at least 1"]. */
 function zodFieldErrors(err: ZodError): FieldErrors {
   const fields: FieldErrors = {};
   for (const issue of err.issues) {
@@ -22,10 +25,12 @@ function zodFieldErrors(err: ZodError): FieldErrors {
   return fields;
 }
 
+/** True for MongoDB's duplicate-key error (code 11000), which a unique index raises. */
 function isDuplicateKeyError(err: unknown): err is { code: 11000; keyPattern?: Record<string, unknown> } {
   return typeof err === "object" && err !== null && (err as { code?: unknown }).code === 11000;
 }
 
+/** Turns any thrown error into a JSON error response with the right status. Unknown errors become a plain 500. */
 export function toErrorResponse(err: unknown): NextResponse {
   if (err instanceof RateLimitError) {
     const res = errorResponse(err.status, err.code, err.message);
@@ -82,6 +87,7 @@ export function authedHandler<C = unknown>(
   return handler<C>(async (req, ctx) => fn(req, ctx, await requireUser(req.cookies.get(SESSION_COOKIE)?.value)));
 }
 
+/** Reads the JSON body and validates it with a zod schema. Bad JSON is 400 INVALID_JSON; invalid data is 422. */
 export async function parseBody<S extends z.ZodType>(req: Request, schema: S): Promise<z.output<S>> {
   let body: unknown;
   try {
@@ -92,6 +98,7 @@ export async function parseBody<S extends z.ZodType>(req: Request, schema: S): P
   return schema.parse(body);
 }
 
+/** Validates the URL query string (e.g. ?page=2&q=bolt) with a zod schema; invalid values are 422. */
 export function parseQuery<S extends z.ZodType>(req: NextRequest, schema: S): z.output<S> {
   return schema.parse(Object.fromEntries(req.nextUrl.searchParams));
 }

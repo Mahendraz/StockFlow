@@ -6,6 +6,7 @@ import { InvoiceForm } from "./InvoiceForm";
 import { ErrorBanner } from "./ui";
 import { useInvoice } from "./use-invoice";
 
+/** Edit screen: loads the invoice, then shows InvoiceForm for a DRAFT, or a message for any other status. */
 export function EditInvoice({ id, taxRateBps }: { id: string; taxRateBps: number }) {
   const invoice = useInvoice(id);
 

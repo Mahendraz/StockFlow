@@ -17,6 +17,7 @@ import { Session } from "@/server/models/session";
 import { User } from "@/server/models/user";
 import { createProduct } from "@/server/products/product.service";
 
+/** The demo login this script creates; the README lists the same credentials. */
 export const DEMO_EMAIL = "demo@stockflow.test";
 export const DEMO_PASSWORD = "Demo12345!";
 
@@ -32,6 +33,7 @@ const PRODUCTS = [
   { sku: "HS-BT", name: "Bluetooth headset", unitPrice: 61_000_000, quantityOnHand: 9 },
 ];
 
+/** Wipes the old demo user, creates a fresh one, then adds products and invoices through the real services. */
 async function main() {
   try {
     process.loadEnvFile(); // .env, if present; otherwise rely on real environment variables
@@ -39,6 +41,7 @@ async function main() {
 
   await connectDb();
 
+  // Re-run: remove the previous demo user and everything they own, so the seed always starts clean.
   const existing = await User.findOne({ email: DEMO_EMAIL });
   if (existing) {
     const userId = existing._id;
@@ -56,9 +59,11 @@ async function main() {
     passwordHash: await bcrypt.hash(DEMO_PASSWORD, env().BCRYPT_COST),
   });
 
+  // SKU → product id, used below to build the invoice lines.
   const products = new Map<string, string>();
   for (const p of PRODUCTS) products.set(p.sku, (await createProduct(user._id, p)).id);
 
+  // First invoice is issued, so its stock is really deducted; the second one stays a DRAFT.
   const issued = await createInvoice(user._id, {
     customerName: "PT Maju Jaya",
     notes: "Net 30. Thank you for your business.",
@@ -81,6 +86,7 @@ async function main() {
   console.log(`Log in with ${DEMO_EMAIL} / ${DEMO_PASSWORD}`);
 }
 
+// Always close the DB connection at the end; an open connection would keep the script from exiting.
 main()
   .catch((err) => {
     console.error(err);

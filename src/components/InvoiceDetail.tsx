@@ -1,5 +1,7 @@
 "use client";
 
+// Invoice detail screen (/invoices/[id]): status actions, customer and dates, line items, and totals.
+
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { api, ApiError, errorMessage } from "@/lib/api-client";
@@ -16,6 +18,7 @@ const ACTIONS: Record<Exclude<InvoiceStatus, "DRAFT">, { path: string; label: st
   CANCELLED: { path: "cancel", label: "Cancel invoice", className: "btn btn-danger" },
 };
 
+/** Question to confirm before a status change, or null when no confirmation is needed (Mark paid). */
 function confirmText(from: InvoiceStatus, to: InvoiceStatus): string | null {
   if (to === "ISSUED") return "Issue this invoice? Stock will be deducted for every line.";
   if (to === "CANCELLED") {
@@ -24,10 +27,13 @@ function confirmText(from: InvoiceStatus, to: InvoiceStatus): string | null {
   return null;
 }
 
+/** Shows one invoice with buttons for the moves it allows: Edit (DRAFT only), Issue, Mark paid, Cancel. */
 export function InvoiceDetail({ id }: { id: string }) {
   const queryClient = useQueryClient();
   const invoice = useInvoice(id);
 
+  // Status change: POST /api/invoices/:id/issue, /pay or /cancel.
+  // On success, show the returned invoice and refresh the invoice list and product stock.
   const transition = useMutation({
     mutationFn: (path: string) => api<{ data: InvoiceDTO }>(`/api/invoices/${id}/${path}`, { method: "POST" }),
     onSuccess: ({ data }) => {
@@ -39,6 +45,7 @@ export function InvoiceDetail({ id }: { id: string }) {
 
   if (invoice.isPending) return <p className="text-slate-500">Loading invoice…</p>;
   if (invoice.error) {
+    // 404 means missing or owned by another user; the server does not say which.
     if (invoice.error instanceof ApiError && invoice.error.status === 404) {
       return (
         <div className="space-y-3">
@@ -53,8 +60,10 @@ export function InvoiceDetail({ id }: { id: string }) {
   }
 
   const inv = invoice.data;
+  // Statuses this invoice may move to next (from ALLOWED_TRANSITIONS); one button each.
   const targets = ALLOWED_TRANSITIONS[inv.status] as Exclude<InvoiceStatus, "DRAFT">[];
 
+  /** Asks for confirmation when needed, then sends the status change. */
   function run(to: Exclude<InvoiceStatus, "DRAFT">) {
     const text = confirmText(inv.status, to);
     if (text && !confirm(text)) return;
@@ -67,6 +76,7 @@ export function InvoiceDetail({ id }: { id: string }) {
         ← Invoices
       </Link>
 
+      {/* Number, status badge, and action buttons (all disabled while a status change is running) */}
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="font-mono text-2xl font-semibold">{inv.invoiceNumber}</h1>
         <StatusBadge status={inv.status} />
@@ -86,6 +96,7 @@ export function InvoiceDetail({ id }: { id: string }) {
 
       {transition.error && <ErrorBanner message={errorMessage(transition.error)} />}
 
+      {/* Customer, dates, and notes */}
       <dl className="card grid grid-cols-1 gap-3 text-sm sm:grid-cols-3">
         <div>
           <dt className="text-slate-500">Customer</dt>
@@ -107,6 +118,7 @@ export function InvoiceDetail({ id }: { id: string }) {
         )}
       </dl>
 
+      {/* Line items and totals exactly as stored on the invoice (snapshot prices) */}
       <div className="card overflow-x-auto p-0">
         <table className="table">
           <thead>

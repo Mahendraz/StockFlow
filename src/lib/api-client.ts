@@ -4,6 +4,7 @@
  */
 export type FieldErrors = Record<string, string[]>;
 
+/** Thrown by api() for a failed request: HTTP status (0 = network failure), error code and per-field messages. */
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -17,6 +18,10 @@ export class ApiError extends Error {
 
 type Method = "GET" | "POST" | "PATCH" | "DELETE";
 
+/**
+ * Calls the JSON API (the browser attaches the session cookie) and returns the parsed body, or undefined for 204.
+ * Throws ApiError on a non-2xx answer or a network failure; a 401 from a non-auth endpoint also redirects to /login.
+ */
 export async function api<T = unknown>(path: string, options: { method?: Method; body?: unknown } = {}): Promise<T> {
   let res: Response;
   try {
@@ -47,10 +52,12 @@ export async function api<T = unknown>(path: string, options: { method?: Method;
   return json as T;
 }
 
+/** Text to show for any caught error, with a generic fallback. */
 export function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : "Something went wrong";
 }
 
+/** Per-field messages from an ApiError (keys like "items.0.quantity"), or {} for any other error. */
 export function fieldErrors(err: unknown): FieldErrors {
   return err instanceof ApiError ? err.fields : {};
 }

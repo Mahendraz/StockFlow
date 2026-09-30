@@ -1,3 +1,5 @@
+// Mongoose model for the per-user, per-year counters behind invoice numbers (INV-2026-0001).
+
 import { Schema, model, models, type InferSchemaType, type Model } from "mongoose";
 
 // One document per (user, year); `seq` is the last invoice number handed out.

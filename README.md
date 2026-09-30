@@ -14,7 +14,7 @@ Next.js 16 (App Router, TypeScript) for both the UI and the API, MongoDB 7 via M
 either **Docker** *or* nothing extra (see option B).
 
 ```bash
-git clone <this repo> stockflow && cd stockflow
+git clone https://github.com/Mahendraz/StockFlow.git stockflow && cd stockflow
 npm install
 cp .env.example .env            # Windows (cmd): copy .env.example .env
 ```
@@ -204,15 +204,17 @@ All endpoints take and return JSON. Money is in **integer minor units**. Dates a
 | 429 | `RATE_LIMITED` (with `Retry-After`) |
 | 500 | `INTERNAL_ERROR`. Details are logged on the server and never sent to the client. |
 
-*Why 409 for insufficient stock:* the request is well-formed; it conflicts with the
-current state of a resource (stock on hand). 422 is reserved for input that is invalid
-no matter what the data looks like.
+*Why 409 for insufficient stock and duplicate SKUs:* the request is well-formed; it
+conflicts with the current state of the data (stock on hand, or another product that
+already has that SKU). When a form field is involved, the 409 still carries `fields`
+(`sku`, `items.0.quantity`) so the form can show the message next to that input. 422 is
+reserved for input that is invalid no matter what the data looks like.
 
 ---
 
 ## Tests
 
-34 tests in `tests/`. Route handlers are imported and called with real `NextRequest`
+36 tests in `tests/`. Route handlers are imported and called with real `NextRequest`
 objects, against a real (in-memory) MongoDB replica set, so they exercise validation,
 auth, transactions and the error mapping end to end.
 
@@ -229,8 +231,9 @@ The five the brief requires:
 Also covered: totals and half-up tax rounding, clients' totals ignored, all-or-nothing
 rollback when one line is short, two concurrent issues competing for the same stock,
 double-issuing one invoice, every illegal transition, price snapshots, draft-only edits,
-the product delete guard, cross-user isolation, duplicate SKU, search and pagination,
-logout invalidating the session, the login rate limit, and the money helpers.
+impossible dates (422, not 500), the product delete guard, cross-user isolation,
+duplicate SKU, clearing a description, search and pagination, logout invalidating the
+session, the login rate limit, and the money helpers.
 
 ---
 
@@ -301,6 +304,20 @@ logout invalidating the session, the login rate limit, and the money helpers.
 5. Invoice print/PDF view, and a searchable product picker on the invoice form.
 6. `docker compose up` for the whole app, not just the database.
 
+## AI Usage
+
+- **Tool:** Claude Code (Anthropic's Claude), in the terminal.
+- **Planning:** helped pick the stack and sketch the screens before any code was written.
+- **Building:** wrote most of the code, tests and this README, one feature per commit.
+- **Checking:** reviewed the finished app against the brief (fresh clone, HTTP smoke test,
+  browser walkthrough). It found two bugs, now fixed with tests: impossible dates returned
+  500, and a product description could not be cleared.
+- **My part:** I chose the approach, reviewed the changes and ran the app and tests myself.
+
+## Time spent
+
+About 5 hours, including reviewing and testing.
+
 ## Submission checklist
 
 - [x] `git clone` → follow README → app runs, with no undocumented steps (see [Quick start](#quick-start))
@@ -314,5 +331,5 @@ logout invalidating the session, the login rate limit, and the money helpers.
 - [x] Issuing decrements stock; cancelling an issued invoice restores it (atomic, in one transaction)
 - [x] Illegal status transitions are rejected (`409 INVALID_TRANSITION`)
 - [x] Changing a product price does not alter an existing invoice (line snapshots)
-- [x] Tests run with a single documented command and pass (`npm test`, 34 tests)
+- [x] Tests run with a single documented command and pass (`npm test`, 36 tests)
 - [x] More than one commit, with readable messages

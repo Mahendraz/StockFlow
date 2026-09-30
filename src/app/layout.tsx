@@ -7,6 +7,7 @@ export const metadata: Metadata = {
   description: "Minimal inventory and invoicing",
 };
 
+/** Root layout around every page: loads global CSS and wraps the app in <Providers> (the React Query cache). */
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en">

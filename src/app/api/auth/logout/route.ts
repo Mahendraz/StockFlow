@@ -3,6 +3,7 @@ import { logout } from "@/server/auth/auth.service";
 import { clearSessionCookie, SESSION_COOKIE } from "@/server/auth/cookie";
 import { handler } from "@/server/http";
 
+// POST /api/auth/logout: deletes the session in the database and clears the cookie (204).
 // Idempotent: logging out without a (valid) session still succeeds.
 export const POST = handler(async (req) => {
   await logout(req.cookies.get(SESSION_COOKIE)?.value);

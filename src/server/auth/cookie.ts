@@ -1,5 +1,8 @@
+// The session cookie: its name and the flags it is set and cleared with.
+
 import type { NextResponse } from "next/server";
 
+/** Name of the cookie that holds the session token. */
 export const SESSION_COOKIE = "sf_session";
 
 /**
@@ -17,6 +20,7 @@ export function setSessionCookie(res: NextResponse, token: string, expiresAt: Da
   });
 }
 
+/** Deletes the session cookie in the browser (empty value, maxAge 0), using the same flags it was set with. */
 export function clearSessionCookie(res: NextResponse): void {
   res.cookies.set(SESSION_COOKIE, "", {
     httpOnly: true,

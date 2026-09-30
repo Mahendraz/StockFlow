@@ -1,3 +1,5 @@
+// Mongoose model for user accounts: email plus bcrypt password hash.
+
 import { Schema, model, models, type HydratedDocument, type InferSchemaType, type Model } from "mongoose";
 
 const userSchema = new Schema(

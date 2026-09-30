@@ -1,3 +1,5 @@
+// Shared test helpers: build requests for the route handlers and sign up users with a real session.
+
 import { NextRequest } from "next/server";
 import { POST as registerRoute } from "@/app/api/auth/register/route";
 import { SESSION_COOKIE } from "@/server/auth/cookie";
@@ -25,6 +27,7 @@ export function sessionFrom(res: Response): string | undefined {
   return header?.slice(SESSION_COOKIE.length + 1).split(";")[0];
 }
 
+// Keeps the default signUp() emails unique.
 let counter = 0;
 
 /** Registers a fresh user and returns their session token. */

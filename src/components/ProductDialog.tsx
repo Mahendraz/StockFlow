@@ -10,6 +10,7 @@ import { ErrorBanner, Field } from "./ui";
 /** Create (product = null) or edit a product. Prices are typed in major units, sent as minor units. */
 export function ProductDialog({ product, onClose }: { product: ProductDTO | null; onClose: () => void }) {
   const queryClient = useQueryClient();
+  // Form values as text. When editing, the price is shown in major units without thousands separators.
   const [form, setForm] = useState({
     sku: product?.sku ?? "",
     name: product?.name ?? "",
@@ -17,8 +18,10 @@ export function ProductDialog({ product, onClose }: { product: ProductDTO | null
     unitPrice: product ? formatMinor(product.unitPrice).replace(/,/g, "") : "",
     quantityOnHand: product ? String(product.quantityOnHand) : "",
   });
+  // Errors found in the browser before sending (only numbers that fail to parse).
   const [localErrors, setLocalErrors] = useState<FieldErrors>({});
 
+  // Save: PATCH /api/products/:id when editing, POST /api/products when creating; then refresh lists and close.
   const save = useMutation({
     mutationFn: (body: Record<string, unknown>) =>
       product
@@ -30,6 +33,7 @@ export function ProductDialog({ product, onClose }: { product: ProductDTO | null
     },
   });
 
+  /** Converts price and quantity to numbers; if either fails, shows the error here, otherwise saves. */
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     const unitPrice = parseMajorInput(form.unitPrice);
@@ -50,7 +54,9 @@ export function ProductDialog({ product, onClose }: { product: ProductDTO | null
     });
   }
 
+  // Server errors and local parsing errors together; a local error wins for the same field.
   const errors = { ...fieldErrors(save.error), ...localErrors };
+  // Shared props for each input: id, value, change handler, and a red border when the field has an error.
   const bind = (key: keyof typeof form) => ({
     id: key,
     className: "input",
@@ -59,6 +65,7 @@ export function ProductDialog({ product, onClose }: { product: ProductDTO | null
     onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setForm({ ...form, [key]: e.target.value }),
   });
 
+  // Modal: a dark overlay with the form card on top of the page.
   return (
     <div className="fixed inset-0 z-10 flex items-start justify-center overflow-y-auto bg-black/30 p-4 sm:pt-20">
       <form role="dialog" aria-modal="true" aria-labelledby="product-dialog-title" onSubmit={onSubmit} className="card w-full max-w-md space-y-3" noValidate>
