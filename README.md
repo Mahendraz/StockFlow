@@ -1,10 +1,35 @@
-# StockFlow
+# 📦 StockFlow
 
-A minimal inventory and invoicing app. Staff sign in, keep a product list with stock on
-hand, and raise invoices. Issuing an invoice takes the stock out; cancelling an issued
-invoice puts it back.
+**Inventory and invoicing with stock integrity built in.**
 
-Next.js 16 (App Router, TypeScript) for both the UI and the API, MongoDB 7 via Mongoose.
+[![Next.js](https://img.shields.io/badge/Next.js-16-black?style=for-the-badge)](https://github.com/Mahendraz/StockFlow)
+[![TypeScript](https://img.shields.io/badge/TypeScript-Full%20Stack-3178c6?style=for-the-badge)](https://github.com/Mahendraz/StockFlow)
+[![MongoDB](https://img.shields.io/badge/MongoDB-Transactions-47a248?style=for-the-badge)](https://github.com/Mahendraz/StockFlow)
+[![Vitest](https://img.shields.io/badge/Vitest-Unit%20%2B%20Integration-6e9f18?style=for-the-badge)](https://github.com/Mahendraz/StockFlow)
+
+StockFlow is a full-stack inventory and invoicing application for managing products, on-hand stock, and invoices. Staff can issue, pay, or cancel invoices with predictable, auditable stock behavior.
+
+### ✨ What makes it interesting
+
+| Area | Engineering decision |
+| --- | --- |
+| **Inventory integrity** | Issuing invoices uses atomic MongoDB transactions and conditional stock updates to prevent negative stock |
+| **Invoice lifecycle** | Explicit draft → issued → paid or cancelled transitions, with stock restored when applicable |
+| **Correct totals** | Integer money calculations and server-generated totals avoid floating-point surprises |
+| **Access control** | Server-side sessions, password hashing, login throttling, and per-user data isolation |
+| **Automated verification** | Unit and integration tests exercise route handlers with an isolated MongoDB replica set |
+
+### 🧱 Architecture at a glance
+
+```mermaid
+flowchart LR
+    UI["Next.js UI"] --> API["API route handlers"]
+    API --> Services["Domain services"]
+    Services --> DB[("MongoDB")]
+    Services --> Logic["Money & status rules"]
+```
+
+**Try it locally:** follow the quick start below, run the demo seed, and sign in using the documented local demo account. No hosted demo is claimed here.
 
 ---
 
